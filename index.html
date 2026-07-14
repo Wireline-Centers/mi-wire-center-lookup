@@ -1,0 +1,2566 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Michigan wire center lookup | Verizon</title>
+<link rel="stylesheet" href="leaflet.css"/>
+<style>
+  /* Verizon brand colors: red #CD040B, black #000000, dark gray #333333, mid gray #666666, light gray #F6F6F6 */
+  :root {
+    --vzred: #CD040B;
+    --vzred-dark: #a00008;
+    --vzred-light: rgba(205,4,11,0.08);
+    --black: #000000;
+    --gray-90: #1A1A1A;
+    --gray-70: #333333;
+    --gray-50: #666666;
+    --gray-30: #999999;
+    --gray-10: #E5E5E5;
+    --gray-05: #F6F6F6;
+    --white: #FFFFFF;
+    --border: #D8D8D8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif; background: var(--gray-05); color: var(--gray-90); font-size: 14px; line-height: 1.5; }
+
+  /* Header — Verizon brand bar */
+  header {
+    background: var(--black);
+    color: var(--white);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    height: 64px;
+    border-bottom: 3px solid var(--vzred);
+    flex-shrink: 0;
+  }
+  .vzlogo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  /* Verizon wordmark — checkmark + VERIZON text */
+  .vzlogo svg { width: 32px; height: 32px; }
+  .vzlogo-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--white);
+  }
+  .header-divider { width: 1px; height: 32px; background: var(--gray-70); flex-shrink: 0; }
+  .header-text h1 { font-size: 0.95rem; font-weight: 600; color: var(--white); }
+  .header-text p { font-size: 0.75rem; color: var(--gray-30); margin-top: 2px; }
+
+  .layout { display: flex; height: calc(100vh - 64px); }
+
+  /* Sidebar */
+  #sidebar { width: 360px; min-width: 300px; background: var(--white); display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; }
+  #search-box { padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--white); }
+  #search {
+    width: 100%; padding: 9px 12px;
+    border: 1px solid var(--gray-10); border-radius: 4px;
+    font-size: 0.875rem; color: var(--gray-90);
+    background: var(--white);
+    transition: border-color 0.15s;
+  }
+  #search::placeholder { color: var(--gray-30); }
+  #search:focus { outline: none; border-color: var(--vzred); box-shadow: 0 0 0 2px var(--vzred-light); }
+  #results-count { font-size: 0.72rem; color: var(--gray-50); margin-top: 5px; }
+  #wc-list { overflow-y: auto; flex: 1; }
+  .wc-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--gray-05); transition: background 0.1s; }
+  .wc-item:hover { background: var(--vzred-light); }
+  .wc-item.selected { background: var(--vzred-light); border-left: 3px solid var(--vzred); }
+  .wc-item .wc-name { font-weight: 600; font-size: 0.875rem; color: var(--gray-90); }
+  .wc-item .wc-clli { font-size: 0.72rem; color: var(--gray-50); font-family: 'Courier New', monospace; margin-top: 1px; }
+  .wc-item .wc-pcount { font-size: 0.7rem; color: #2D7A2D; margin-top: 2px; font-weight: 500; }
+  .wc-item .wc-pcount.none { color: var(--gray-30); }
+
+  /* Map */
+  #map { flex: 1; }
+
+  /* Detail panel */
+  #detail-panel {
+    position: absolute; right: 0; top: 64px;
+    width: 340px; background: var(--white);
+    border-left: 1px solid var(--border);
+    height: calc(100vh - 64px);
+    overflow-y: auto; z-index: 1000;
+    transform: translateX(100%);
+    transition: transform 0.2s ease;
+    box-shadow: -2px 0 12px rgba(0,0,0,0.1);
+  }
+  #detail-panel.open { transform: translateX(0); }
+  #detail-header { background: var(--vzred); color: var(--white); padding: 14px 16px; position: relative; }
+  #detail-header h2 { font-size: 1rem; font-weight: 700; }
+  #detail-header .clli-badge { font-size: 0.72rem; font-family: 'Courier New', monospace; opacity: 0.9; margin-top: 3px; letter-spacing: 0.08em; }
+  #detail-body { padding: 16px; }
+
+  .detail-section { margin-bottom: 18px; }
+  .detail-section h3 {
+    font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; color: var(--gray-50);
+    letter-spacing: 0.08em; margin-bottom: 8px;
+    padding-bottom: 5px; border-bottom: 1px solid var(--gray-10);
+  }
+  .addr-line { font-size: 0.85rem; color: var(--gray-70); line-height: 1.6; }
+  .addr-link { font-size: 0.78rem; color: var(--vzred); text-decoration: none; display: inline-block; margin-top: 5px; }
+  .addr-link:hover { text-decoration: underline; }
+
+  .provider-list { list-style: none; }
+  .provider-list li {
+    padding: 7px 11px; background: var(--gray-05);
+    border-radius: 3px; font-size: 0.82rem;
+    margin-bottom: 4px; border-left: 3px solid #4A90D9;
+    color: var(--gray-70); font-weight: 500;
+  }
+  .provider-list li.wireless { border-left-color: #E8820C; }
+  .no-providers { font-size: 0.82rem; color: var(--gray-30); }
+
+  .note-bar {
+    background: var(--gray-05); border: 1px solid var(--gray-10);
+    border-radius: 3px; padding: 8px 10px;
+    font-size: 0.75rem; color: var(--gray-50); margin-bottom: 14px;
+    line-height: 1.5;
+  }
+  .disclosure {
+    font-size: 0.68rem; color: var(--gray-30);
+    padding-top: 10px; border-top: 1px solid var(--gray-10);
+    line-height: 1.5;
+  }
+
+  #close-btn {
+    position: absolute; top: 12px; right: 12px;
+    background: rgba(255,255,255,0.2); border: none; color: white;
+    width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+    font-size: 1rem; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  #close-btn:hover { background: rgba(255,255,255,0.35); }
+
+  /* Map popups */
+  .leaflet-popup-content-wrapper { border-radius: 4px; box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
+  .map-popup h4 { font-size: 0.875rem; font-weight: 700; color: var(--vzred); }
+  .map-popup p { font-size: 0.75rem; color: var(--gray-50); margin-top: 3px; }
+  .map-popup .popup-btn {
+    display: inline-block; margin-top: 8px;
+    padding: 5px 12px; background: var(--vzred); color: white;
+    border-radius: 3px; font-size: 0.75rem; cursor: pointer;
+    border: none; font-weight: 600; letter-spacing: 0.01em;
+  }
+  .map-popup .popup-btn:hover { background: var(--vzred-dark); }
+
+  /* Scrollbar */
+  #wc-list::-webkit-scrollbar, #detail-panel::-webkit-scrollbar { width: 5px; }
+  #wc-list::-webkit-scrollbar-thumb, #detail-panel::-webkit-scrollbar-thumb { background: var(--gray-10); border-radius: 3px; }
+
+  @media (max-width: 700px) {
+    .layout { flex-direction: column; }
+    #sidebar { width: 100%; height: 35vh; min-width: unset; }
+    #detail-panel { top: auto; bottom: 0; right: 0; left: 0; width: 100%; height: 55vh; border-left: none; border-top: 1px solid var(--border); transform: translateY(100%); }
+    #detail-panel.open { transform: translateY(0); }
+    header { height: 56px; padding: 0 16px; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="vzlogo" aria-label="Verizon">
+    <!-- Verizon checkmark logo -->
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M28 6L13 26L4 17" stroke="#CD040B" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="vzlogo-name">Verizon</span>
+  </div>
+  <div class="header-divider" aria-hidden="true"></div>
+  <div class="header-text">
+    <h1>Michigan wire center lookup</h1>
+    <p>Frontier Exhibit C &mdash; alternative internet service providers by wire center</p>
+  </div>
+</header>
+<div class="layout">
+  <div id="sidebar">
+    <div id="search-box">
+      <input type="text" id="search" placeholder="Search by city, CLLI code, or provider..." autocomplete="off"/>
+      <div id="results-count"></div>
+    </div>
+    <div id="wc-list"></div>
+  </div>
+  <div id="map"></div>
+</div>
+<div id="detail-panel">
+  <div id="detail-header" style="position:relative">
+    <button id="close-btn" onclick="closeDetail()">&#x2715;</button>
+    <h2 id="detail-name"></h2>
+    <div class="clli-badge" id="detail-clli"></div>
+  </div>
+  <div id="detail-body"></div>
+</div>
+
+
+<script src="leaflet.js"></script>
+<script>
+const COORD_PATCHES = {
+  "BURLMIXI": { "lat": 42.105555969074, "lon": -85.08005048859 },
+  "LCTAMIXI": { "lat": 42.4136434,      "lon": -86.1297501    },
+  "HHLKMIXG": { "lat": 44.314739,       "lon": -84.7647496    },
+  "CDWLMIGC": { "lat": 41.82552,        "lon": -85.0039497    }
+};
+
+const WIRELESS = ['verizon', 'at&t', 't-mobile', 'sprint', 'wireless'];
+
+function tc(s) {
+  if (!s) return '';
+  return s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
+const WC_DATA = [
+    {
+        "clli":  "ADRNMIXG",
+        "name":  "Communications Adrian",
+        "lat":  41.89614907,
+        "lon":  -84.03923571,
+        "addr":  "340 S MAIN ST",
+        "city":  "ADRIAN",
+        "zip":  "49221-2699",
+        "providers":  ["Xfinity", "ACD.net", "Buckeye Telesystem", "D&P Communications", "Everstream", "Midwest Energy & Communications", "Ogden Communications", "Sand Creek Telephone Company"]
+    },
+    {
+        "clli":  "ADSNMIXI",
+        "name":  "Communications Addison",
+        "lat":  41.98693782,
+        "lon":  -84.3467094,
+        "addr":  "123 N TALBOT ST",
+        "city":  "ADDISON",
+        "zip":  "49220",
+        "providers":  ["Xfinity", "D&P Communications", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "ADVLMIXG",
+        "name":  "G wireless service in the impacted areas Adamsville",
+        "lat":  41.79831415,
+        "lon":  -86.01102747,
+        "addr":  "23013 S SHORE DR",
+        "city":  "ADAMSVILLE",
+        "zip":  "49112",
+        "providers":  ["Xfinity", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "ALDNMIXH",
+        "name":  "Sand Creek Telephone Company Alden",
+        "lat":  44.8819838,
+        "lon":  -85.2743736,
+        "addr":  "10479 EAST ST",
+        "city":  "ALDEN",
+        "zip":  "49612",
+        "providers":  ["Spectrum", "186networks", "Truestream"]
+    },
+    {
+        "clli":  "ALGRMIXJ",
+        "name":  "Truestream Alger",
+        "lat":  44.12683703,
+        "lon":  -84.11820732,
+        "addr":  "7770 NEWBERRY",
+        "city":  "ALGER",
+        "zip":  "48610",
+        "providers":  ["Spectrum", "Vogtmann Engineering Inc."]
+    },
+    {
+        "clli":  "ALLGMIXG",
+        "name":  "Allegan",
+        "lat":  42.52732468,
+        "lon":  -85.85335541,
+        "addr":  "419 HUBBARD ST",
+        "city":  "ALLEGAN",
+        "zip":  "49010",
+        "providers":  ["Spectrum", "123.NET Inc.", "Bloomingdale Communications, Inc.", "Everstream", "Mercury Fiber", "Midwest Energy & Communications", "Zayo Network Services, Inc."]
+    },
+    {
+        "clli":  "ALLNMIXI",
+        "name":  "Allen",
+        "lat":  41.94143991,
+        "lon":  -84.77799749,
+        "addr":  "3000 NORTH SOUTH ALLEN DRIVE",
+        "city":  "ALLEN",
+        "zip":  "49227",
+        "providers":  ["Spectrum", "Xfinity", "ACD.net", "DMCI Broadband LLC"]
+    },
+    {
+        "clli":  "ALMAMIXG",
+        "name":  "Alma",
+        "lat":  43.37823853,
+        "lon":  -84.65713955,
+        "addr":  "345 PINE ST",
+        "city":  "ALMA",
+        "zip":  "48801-1812",
+        "providers":  ["Spectrum", "123.NET Inc.", "Everstream", "HomeWorks Connect", "Point Broadband Fiber Holding LLC", "Winn Telephone Company"]
+    },
+    {
+        "clli":  "ALMTMIXG",
+        "name":  "Winn Telephone Company Almont",
+        "lat":  42.91969813,
+        "lon":  -83.04347232,
+        "addr":  "216 E MILL",
+        "city":  "ALMONT",
+        "zip":  "48003",
+        "providers":  ["Spectrum", "Xfinity", "Air Advantage", "Mercury Fiber"]
+    },
+    {
+        "clli":  "ALPEMIXG",
+        "name":  "Mercury Fiber Alpena",
+        "lat":  45.0629025,
+        "lon":  -83.43589291,
+        "addr":  "223 LOCKWOOD ST",
+        "city":  "ALPENA",
+        "zip":  "49707",
+        "providers":  ["Spectrum", "ACD.net", "Everstream", "Peninsula Fiber Network", "Presque Isle Connect"]
+    },
+    {
+        "clli":  "ASHYMIXL",
+        "name":  "Presque Isle Connect Ashley",
+        "lat":  43.185253,
+        "lon":  -84.47599,
+        "addr":  "107 W PINE",
+        "city":  "ASHLEY",
+        "zip":  "48806",
+        "providers":  ["HomeWorks Connect", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "ATLNMIXG",
+        "name":  "Atlanta",
+        "lat":  45.02399063,
+        "lon":  -84.15209961,
+        "addr":  "ALLEY N OF M-32",
+        "city":  "ATLANTA",
+        "zip":  "49709",
+        "providers":  ["Spectrum", "ACD.net", "Barger Creek Wireless", "Everstream", "Peninsula Fiber Network", "Presque Isle Connect", "Truestream"]
+    },
+    {
+        "clli":  "AVOCMIXG",
+        "name":  "Truestream Avoca",
+        "lat":  43.06119156,
+        "lon":  -82.6914978,
+        "addr":  "33 WILLOW",
+        "city":  "AVOCA",
+        "zip":  "48006",
+        "providers":  ["Xfinity"]
+    },
+    {
+        "clli":  "BATHMIXG",
+        "name":  "Bath",
+        "lat":  42.8177876,
+        "lon":  -84.45002876,
+        "addr":  "5720 E HIGH",
+        "city":  "BATH",
+        "zip":  "49236",
+        "providers":  ["Xfinity", "ACD.net", "AT&T", "DayStarr", "Everstream", "WOW Internet, Cable & Phone", "Zayo Group LLC", "Zayo Network Services, LLC"]
+    },
+    {
+        "clli":  "BLFDMIXG",
+        "name":  "Truestream Blissfield",
+        "lat":  41.83074005,
+        "lon":  -83.86124298,
+        "addr":  "205 E JEFFERSON",
+        "city":  "BLISSFIELD",
+        "zip":  "49228",
+        "providers":  ["ACD.net", "Buckeye Cablesystem", "D&P Communications", "Everstream", "Midwest Energy & Communications", "Ogden Communications"]
+    },
+    {
+        "clli":  "BLLRMIXG",
+        "name":  "Bellaire",
+        "lat":  44.97728348,
+        "lon":  -85.20961761,
+        "addr":  "208 N BRIDGE ST",
+        "city":  "BELLAIRE",
+        "zip":  "49615",
+        "providers":  ["Spectrum", "Peninsula Fiber Network", "Truestream"]
+    },
+    {
+        "clli":  "BNCRMIXG",
+        "name":  "Xfinity Bancroft",
+        "lat":  42.87558921,
+        "lon":  -84.06536043,
+        "addr":  "123 WARREN ST",
+        "city":  "BANCROFT",
+        "zip":  "48414",
+        "providers":  ["Spectrum", "DayStarr", "Surf Internet", "TDS Telecom"]
+    },
+    {
+        "clli":  "BNGRMIXG",
+        "name":  "Telecom Bangor",
+        "lat":  42.31361771,
+        "lon":  -86.11362457,
+        "addr":  "253 W MONROE ST",
+        "city":  "BANGOR",
+        "zip":  "49013",
+        "providers":  ["Xfinity", "Bloomingdale Communications, Inc.", "Everstream", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "BNHLMIXI",
+        "name":  "Pigeon Telephone Company Bundy Hill",
+        "lat":  42.05471568,
+        "lon":  -84.47021537,
+        "addr":  "9520 E CHICAGO",
+        "city":  "BUNDY HILL",
+        "zip":  "49203",
+        "providers":  ["Xfinity", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "BRDAMIXI",
+        "name":  "Communications Baroda",
+        "lat":  41.95730478,
+        "lon":  -86.49036035,
+        "addr":  "1584 LEMON CREEK RD",
+        "city":  "BARODA",
+        "zip":  "49101",
+        "providers":  ["Xfinity", "Midwest Energy & Communications", "Surf Internet"]
+    },
+    {
+        "clli":  "BRDGMIXI",
+        "name":  "Winn Telephone Company Bridgman",
+        "lat":  41.95378304,
+        "lon":  -86.55322395,
+        "addr":  "9110 RED ARROW HWY",
+        "city":  "BRIDGEMAN",
+        "zip":  "49106",
+        "providers":  ["Xfinity", "Everstream", "Midwest Energy & Communications", "Surf Internet"]
+    },
+    {
+        "clli":  "BRKLMIXI",
+        "name":  "Everstream Brooklyn",
+        "lat":  42.10477452,
+        "lon":  -84.24889305,
+        "addr":  "109 RANDOLPH ST",
+        "city":  "BROOKLYN",
+        "zip":  "49230",
+        "providers":  ["Xfinity", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "BROKMIXG",
+        "name":  "Communications Burr Oak",
+        "lat":  41.84535675,
+        "lon":  -85.31873524,
+        "addr":  "210 S 4TH ST",
+        "city":  "BURR OAK",
+        "zip":  "49030",
+        "providers":  ["Spectrum", "ACD.net", "Mercury Fiber", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "BRRGMIXG",
+        "name":  "Ogden Communications Breckenridge",
+        "lat":  43.4079507,
+        "lon":  -84.47414652,
+        "addr":  "424 E SAGINAW",
+        "city":  "BRECKENRIDGE",
+        "zip":  "48615",
+        "providers":  ["Spectrum", "LakeNet LLC", "Winn Telephone Company Bridgman"]
+    },
+    {
+        "clli":  "BRSNMIXG",
+        "name":  "Communications Bronson",
+        "lat":  41.873124,
+        "lon":  -85.1959008,
+        "addr":  "129 YORK ST",
+        "city":  "BRONSON",
+        "zip":  "49028",
+        "providers":  ["Spectrum", "ACD.net", "DMCI Broadband LLC", "Everstream"]
+    },
+    {
+        "clli":  "BRTNMIXG",
+        "name":  "Surf Internet Britton",
+        "lat":  41.98517092,
+        "lon":  -83.82928446,
+        "addr":  "255 SOUTH ST",
+        "city":  "BRITTON",
+        "zip":  "49229",
+        "providers":  ["Xfinity", "D&P Communications", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "BRYTMIXG",
+        "name":  "Surf Internet Barryton",
+        "lat":  43.75469971,
+        "lon":  -85.15059662,
+        "addr":  "67 S STEARNS",
+        "city":  "BARRYTON",
+        "zip":  "49305",
+        "providers":  ["Spectrum", "HomeWorks Connect", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "BURLMIXI",
+        "name":  "Phone Burlington",
+        "lat":  null,
+        "lon":  null,
+        "addr":  "203 W MAIN ST @ MARSHALL RD",
+        "city":  "BURLINGTON",
+        "zip":  "49029",
+        "providers":  ["Spectrum", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "BWCYMIXG",
+        "name":  "Communications Brown City",
+        "lat":  43.21304664,
+        "lon":  -82.9900407,
+        "addr":  "4271 1ST ST",
+        "city":  "BROWN CITY",
+        "zip":  "48416",
+        "providers":  ["Xfinity", "Air Advantage", "Highline Internet", "Pigeon Telephone Company"]
+    },
+    {
+        "clli":  "CBVLMIXG",
+        "name":  "Phone Columbiaville",
+        "lat":  43.15407944,
+        "lon":  -83.41046143,
+        "addr":  "4405 3RD ST",
+        "city":  "COLUMBIAVILLE",
+        "zip":  "48421",
+        "providers":  ["Spectrum", "Air Advantage", "TDS Telecom"]
+    },
+    {
+        "clli":  "CDWLMIGC",
+        "name":  "1 COLDWATER LAKE RSU",
+        "lat":  null,
+        "lon":  null,
+        "addr":  "SOUTHERN RD & WHALEY RD",
+        "city":  "COLDWATER LAKE",
+        "zip":  "49036",
+        "providers":  ["Spectrum", "Mediacom Xtream"]
+    },
+    {
+        "clli":  "CDWRMIXG",
+        "name":  "Communications Coldwater",
+        "lat":  41.94157295,
+        "lon":  -85.00222519,
+        "addr":  "23 N MONROE ST",
+        "city":  "COLDWATER",
+        "zip":  "49036",
+        "providers":  ["Spectrum", "ACD.net", "Everstream", "Coldwater Board of Public Utilities Coldwater Lake"]
+    },
+    {
+        "clli":  "CLFRMIXG",
+        "name":  "Truestream Clifford",
+        "lat":  43.31569612,
+        "lon":  -83.1804581,
+        "addr":  "9720 WASHINGTON",
+        "city":  "CLIFFORD",
+        "zip":  "48727",
+        "providers":  ["Spectrum", "AT&T", "TEC Fiber"]
+    },
+    {
+        "clli":  "CLRVMIXH",
+        "name":  "Communications Clam River",
+        "lat":  44.9513588,
+        "lon":  -85.27857208,
+        "addr":  "6131 E TORCH LAKE RD",
+        "city":  "CLAM RIVER",
+        "zip":  "49612",
+        "providers":  ["Spectrum", "Truestream"]
+    },
+    {
+        "clli":  "CLTNMIXG",
+        "name":  "Fiber Clinton",
+        "lat":  42.0588913,
+        "lon":  -83.96585083,
+        "addr":  "517 TECUMSEH-CLINTON RD",
+        "city":  "CLINTON",
+        "zip":  "49236",
+        "providers":  ["Xfinity : D&P Communications", "Mercury Fiber", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "CMBAMIXJ",
+        "name":  "Communications Cambria",
+        "lat":  41.82342911,
+        "lon":  -84.66516113,
+        "addr":  "116 S WOODBRIDGE ST",
+        "city":  "CAMBRIA",
+        "zip":  "49242",
+        "providers":  ["Xfinity", "DMCI Broadband LLC"]
+    },
+    {
+        "clli":  "CMDNMIXI",
+        "name":  "Camden",
+        "lat":  41.755867,
+        "lon":  -84.75785065,
+        "addr":  "112 N MAIN ST",
+        "city":  "CAMDEN",
+        "zip":  "49232",
+        "providers":  ["DMCI Broadband LLC"]
+    },
+    {
+        "clli":  "CNCRMIXJ",
+        "name":  "Telecom Concord",
+        "lat":  42.1782018,
+        "lon":  -84.64431246,
+        "addr":  "120 HANOVER ST",
+        "city":  "CONCORD",
+        "zip":  "49237",
+        "providers":  ["Xfinity", "Midwest Energy & Communications", "Surf Internet", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "CNKLMIXG",
+        "name":  "Phone Conklin",
+        "lat":  43.12854029,
+        "lon":  -85.88269919,
+        "addr":  "3748 MILLER ST",
+        "city":  "CONKLIN",
+        "zip":  "49403",
+        "providers":  ["Spectrum", "Xfinity", "Mercury Fiber"]
+    },
+    {
+        "clli":  "CNLKMIXG",
+        "name":  "Surf Internet Central Lake",
+        "lat":  45.06967926,
+        "lon":  -85.26448822,
+        "addr":  "2363 S MAIN",
+        "city":  "CENTRAL LAKE",
+        "zip":  "49622",
+        "providers":  ["Spectrum", "Truestream"]
+    },
+    {
+        "clli":  "CNSTMIXG",
+        "name":  "Mercury Fiber Constantine",
+        "lat":  41.84121944,
+        "lon":  -85.67005433,
+        "addr":  "145 CANARIS ST",
+        "city":  "CONSTANTINE",
+        "zip":  "49042-1015",
+        "providers":  ["Xfinity", "Everstream", "Midwest Energy & Communications", "Surf Internet"]
+    },
+    {
+        "clli":  "CNVIMIXH",
+        "name":  "Truestream Centreville",
+        "lat":  41.92396693,
+        "lon":  -85.52526802,
+        "addr":  "117 N NOTTAWA ST",
+        "city":  "CENTREVILLE",
+        "zip":  "49032",
+        "providers":  ["Spectrum", "Xfinity", "ACD.net", "Everstream", "Mercury Fiber", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "COLNMIXG",
+        "name":  "Mediacom Xtream Colon",
+        "lat":  41.95801891,
+        "lon":  -85.31829268,
+        "addr":  "531 E ROMINE ST",
+        "city":  "COLON",
+        "zip":  "49040",
+        "providers":  ["Spectrum", "Mercury Fiber", "Midwest Energy & Communications", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "CPACMIXH",
+        "name":  "Capac",
+        "lat":  43.015096,
+        "lon":  -82.92759,
+        "addr":  "106 E ALDRICH ST",
+        "city":  "CAPAC",
+        "zip":  "48014",
+        "providers":  ["Spectrum", "Xfinity", "Highline Internet", "Mercury Fiber"]
+    },
+    {
+        "clli":  "CPVLMIXG",
+        "name":  "Surf Internet Coopersville",
+        "lat":  43.06690979,
+        "lon":  -85.93569946,
+        "addr":  "347 GROVE ST",
+        "city":  "COOPERSVILLE",
+        "zip":  "49404",
+        "providers":  ["Spectrum", "Acentek", "AT&T", "Everstream", "Mercury Fiber"]
+    },
+    {
+        "clli":  "CRCYMIXG",
+        "name":  "Mercury Fiber Carson City",
+        "lat":  43.17607842,
+        "lon":  -84.84605223,
+        "addr":  "129 ELM ST",
+        "city":  "CARSON CITY",
+        "zip":  "48811",
+        "providers":  ["CMS Internet", "Everstream", "HomeWorks Connect", "Point Broadband Fiber Holding LLC", "Winn Telephone Company"]
+    },
+    {
+        "clli":  "CRNNMIXK",
+        "name":  "Communications Corunna",
+        "lat":  42.9828199,
+        "lon":  -84.11816977,
+        "addr":  "105 W MACK",
+        "city":  "CORUNNA",
+        "zip":  "48817",
+        "providers":  ["Spectrum", "Xfinity", "DayStarr", "Lennon Telephone Company"]
+    },
+    {
+        "clli":  "CSCYMIXG",
+        "name":  "Fiber Cass City",
+        "lat":  43.60017724,
+        "lon":  -83.17460351,
+        "addr":  "4463 SEEGER ST",
+        "city":  "CASS CITY",
+        "zip":  "48726",
+        "providers":  ["Spectrum", "Xfinity", "Air Advantage", "Highline Internet", "Pigeon Telephone Company", "TEC Fiber"]
+    },
+    {
+        "clli":  "CSPLMIXG",
+        "name":  "Fiber Cassopolis",
+        "lat":  41.91071172,
+        "lon":  -86.01089784,
+        "addr":  "125 S ROWLAND ST",
+        "city":  "CASSOPOLIS",
+        "zip":  "49031",
+        "providers":  ["Xfinity", "ACD.net", "Everstream", "Midwest Energy & Communication s", "Surf Internet"]
+    },
+    {
+        "clli":  "CSVLMIXH",
+        "name":  "Winn Telephone Company Caseville",
+        "lat":  43.94097805,
+        "lon":  -83.27239148,
+        "addr":  "6661 MAIN ST",
+        "city":  "CASEVILLE",
+        "zip":  "48725",
+        "providers":  ["Xfinity", "Pigeon Telephone Company", "TEC Fiber"]
+    },
+    {
+        "clli":  "CVRTMIXG",
+        "name":  "Lennon Telephone Company Covert",
+        "lat":  42.19022512,
+        "lon":  -86.25978023,
+        "addr":  "411 MAIN ST",
+        "city":  "COVERT",
+        "zip":  "49043",
+        "providers":  ["Xfinity", "ACD.net", "Everstream", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "DCTRMIXG",
+        "name":  "Everstream Decatur",
+        "lat":  42.10881472,
+        "lon":  -85.97423226,
+        "addr":  "101 E DELAWARE ST",
+        "city":  "DECATUR",
+        "zip":  "49045",
+        "providers":  ["Xfinity", "Bloomingdale Communications, Inc.", "Everstream", "Midwest Energy & Communications", "Surf Internet"]
+    },
+    {
+        "clli":  "DCVLMIXG",
+        "name":  "Surf Internet Deckerville",
+        "lat":  43.5268306,
+        "lon":  -82.73524483,
+        "addr":  "2493 BLACK RIVER",
+        "city":  "DECKERVILLE",
+        "zip":  "48427",
+        "providers":  ["Xfinity", "Air Advantage", "Highline Internet", "Pigeon Telephone Company", "TEC Fiber"]
+    },
+    {
+        "clli":  "DRNDMIXG",
+        "name":  "Everstream Durand",
+        "lat":  42.91311331,
+        "lon":  -83.98491494,
+        "addr":  "102 W GENESEE ST",
+        "city":  "DURAND",
+        "zip":  "48429",
+        "providers":  ["Spectrum", "DayStarr", "Lennon Telephone Company"]
+    },
+    {
+        "clli":  "DRYDMIXG",
+        "name":  "Surf Internet Dryden",
+        "lat":  42.94394886,
+        "lon":  -83.12625179,
+        "addr":  "4032 UNION ST",
+        "city":  "DRYDEN",
+        "zip":  "48428",
+        "providers":  ["Spectrum"]
+    },
+    {
+        "clli":  "DUNDMIXG",
+        "name":  "Spectrum Dundee",
+        "lat":  41.95827775,
+        "lon":  -83.65891054,
+        "addr":  "116 VAN NEST ST",
+        "city":  "DUNDEE",
+        "zip":  "48131",
+        "providers":  ["Spectrum", "Xfinity", "ACD.net", "D&P Communic a tions", "Everstream"]
+    },
+    {
+        "clli":  "DVSNMIXG",
+        "name":  "Communications Davison",
+        "lat":  43.03198502,
+        "lon":  -83.51768264,
+        "addr":  "101 E 2ND ST",
+        "city":  "DAVISON",
+        "zip":  "48423-1401",
+        "providers":  ["Spectrum", "Xfinity", "123.NET Inc .", "Everstream"]
+    },
+    {
+        "clli":  "DWGCMIXG",
+        "name":  "Dowagiac",
+        "lat":  41.98390592,
+        "lon":  -86.10932027,
+        "addr":  "202 W DIVISION ST",
+        "city":  "DOWAGIAC",
+        "zip":  "49047",
+        "providers":  ["Xfinity", "ACD.net", "Everstream", "Midwest Energy & Communications", "Sister Lakes Cable", "Supernet", "Surf Internet"]
+    },
+    {
+        "clli":  "DWTTMIXG",
+        "name":  "Fiber Dewitt",
+        "lat":  42.84200668,
+        "lon":  -84.57011414,
+        "addr":  "125 W MAIN ST",
+        "city":  "DEWITT",
+        "zip":  "48820",
+        "providers":  ["Xfinity", "ACD.net", "AT&T", "Everstream", "Westphalia Broadband Inc .", "WOW Internet, Cable & Phone", "Zayo Network Services, LLC"]
+    },
+    {
+        "clli":  "EDMRMIXG",
+        "name":  "Truestream Edmore",
+        "lat":  43.40780117,
+        "lon":  -85.03928661,
+        "addr":  "128 S 5TH ST",
+        "city":  "EDMORE",
+        "zip":  "48829",
+        "providers":  ["Spectrum", "CMS Internet", "HomeWorks Connect", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "EDWRMIXG",
+        "name":  "Edwardsburg",
+        "lat":  41.79911077,
+        "lon":  -86.08400233,
+        "addr":  "68824 CASS ST",
+        "city":  "EDWARDSBURG",
+        "zip":  "49112",
+        "providers":  ["Xfinity", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "EKTNMIXG",
+        "name":  "Communications Elkton",
+        "lat":  43.81786667,
+        "lon":  -83.18106495,
+        "addr":  "14 S MAIN ST",
+        "city":  "ELKTON",
+        "zip":  "48731",
+        "providers":  ["Xfinity", "Air Advantage", "Pigeon Telephone Company", "TEC Fiber"]
+    },
+    {
+        "clli":  "ELSIMIXG",
+        "name":  "Truestream Elsie",
+        "lat":  43.08874235,
+        "lon":  -84.38584216,
+        "addr":  "149 E MAIN",
+        "city":  "ELSIE",
+        "zip":  "48831",
+        "providers":  ["Spectrum", "Chapin Telephone Company", "Everstream", "HomeWorks Connect"]
+    },
+    {
+        "clli":  "ELWOMIXH",
+        "name":  "Fiber Ellsworth",
+        "lat":  45.16573504,
+        "lon":  -85.24621904,
+        "addr":  "9231 MAIN ST",
+        "city":  "ELLSWORTH",
+        "zip":  "49729",
+        "providers":  ["Spectrum", "Truestream"]
+    },
+    {
+        "clli":  "EMMTMIXG",
+        "name":  "Connect Emmett",
+        "lat":  42.99014347,
+        "lon":  -82.76611705,
+        "addr":  "3150 WASHINGTON",
+        "city":  "EMMETT",
+        "zip":  "48022",
+        "providers":  ["Xfinity", "Mercury Fiber"]
+    },
+    {
+        "clli":  "ERIEMIXG",
+        "name":  "Mercury Fiber Erie",
+        "lat":  41.79460768,
+        "lon":  -83.49474449,
+        "addr":  "9817 STREETER RD",
+        "city":  "ERIE",
+        "zip":  "48133",
+        "providers":  ["Spectrum", "Buckeye Telesystem", "Everstream"]
+    },
+    {
+        "clli":  "ESPTMIXG",
+        "name":  "Lennon Telephone Company Eastport",
+        "lat":  45.10807224,
+        "lon":  -85.350793,
+        "addr":  "12030 BAKER ST",
+        "city":  "EASTPORT",
+        "zip":  "49627",
+        "providers":  ["Spectrum", "Truestream"]
+    },
+    {
+        "clli":  "FNVLMIXG",
+        "name":  "Fennville",
+        "lat":  42.59441949,
+        "lon":  -86.10614666,
+        "addr":  "203 W MAIN ST",
+        "city":  "FENNVILLE",
+        "zip":  "49408",
+        "providers":  ["Xfinity", "123.NET Inc .", "ACD.net", "Everstream", "Surf Internet"]
+    },
+    {
+        "clli":  "FNWKMIXG",
+        "name":  "Surf Internet Fenwick",
+        "lat":  43.14941957,
+        "lon":  -85.08062193,
+        "addr":  "10077 FIRST ST",
+        "city":  "FENWICK",
+        "zip":  "48834",
+        "providers":  ["Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "FRNTMIXI",
+        "name":  "Phone Frontier",
+        "lat":  41.78181839,
+        "lon":  -84.58818054,
+        "addr":  "13511 S HILLSDALE RD",
+        "city":  "FRONTIER CO",
+        "zip":  "49239",
+        "providers":  ["Xfinity", "DMCI Broadband LLC"]
+    },
+    {
+        "clli":  "FRPRMIXG",
+        "name":  "Fruitport",
+        "lat":  43.13492065,
+        "lon":  -86.15451404,
+        "addr":  "3615 IDA RD",
+        "city":  "FRUITPORT",
+        "zip":  "49415",
+        "providers":  ["Spectrum", "Xfinity", "Everstream"]
+    },
+    {
+        "clli":  "FRVWMIXG",
+        "name":  "Everstream Fairview",
+        "lat":  44.72487978,
+        "lon":  -84.05127057,
+        "addr":  "1986 E MILLER RD",
+        "city":  "FAIRVIEW",
+        "zip":  "48621",
+        "providers":  ["Spectrum", "Allband Communications Cooperative", "Allband Multimedia, LLC", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "FTBGMIXI",
+        "name":  "Fitchburg",
+        "lat":  42.43843079,
+        "lon":  -84.27695465,
+        "addr":  "5016 EAST ST",
+        "city":  "FITCHBURG",
+        "zip":  "49285",
+        "providers":  ["HomeWorks Connect Fowler- Pewamo"]
+    },
+    {
+        "clli":  "FWLRMIXG",
+        "name":  "Pewamo",
+        "lat":  43.00183105,
+        "lon":  -84.75946045,
+        "addr":  "12018 TALLMAN RD",
+        "city":  "FOWLER",
+        "zip":  "48835",
+        "providers":  ["Spectrum", "Everstream", "HomeWorks Connect", "Westphalia Broadband Inc .", "Westphalia Telephone Company", "WOW Internet, Cable & Phone Frontier"]
+    },
+    {
+        "clli":  "GAINMIXG",
+        "name":  "Everstream Gaines",
+        "lat":  42.87245706,
+        "lon":  -83.91426086,
+        "addr":  "113 LORD ST",
+        "city":  "GAINES",
+        "zip":  "48436",
+        "providers":  ["Spectrum", "Xfinity", "Lennon Telephone Company"]
+    },
+    {
+        "clli":  "GBLSMIXG",
+        "name":  "Communications Gobles",
+        "lat":  42.35839225,
+        "lon":  -85.87889917,
+        "addr":  "303 S STATE ST",
+        "city":  "GOBLES",
+        "zip":  "49055",
+        "providers":  ["Spectrum", "Bloomingdale Communications, Inc.", "Mercury Fiber", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "GDJTMIXG",
+        "name":  "Xfinity Grand Junction",
+        "lat":  42.404384,
+        "lon":  -86.061684,
+        "addr":  "388 COUNTY RD",
+        "city":  "GRAND JUNCTION",
+        "zip":  "49056",
+        "providers":  ["123NET Inc.", "Bloomingdale Communications, Inc.", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "GDLSMIXG",
+        "name":  "Communications Goodells",
+        "lat":  42.94451904,
+        "lon":  -82.68334961,
+        "addr":  "8489 COPARK RD",
+        "city":  "GOODELLS",
+        "zip":  "48027",
+        "providers":  ["Xfinity"]
+    },
+    {
+        "clli":  "GLNNMIXI",
+        "name":  "Winn Telephone Company Glenn",
+        "lat":  42.52046138,
+        "lon":  -86.22640617,
+        "addr":  "6989 114TH AVE",
+        "city":  "GLENN",
+        "zip":  "49416",
+        "providers":  ["Xfinity", "123.NET Inc.", "ACD.net", "Everstream", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "GNGSMIXG",
+        "name":  "Lennon Telephone Company Ganges",
+        "lat":  42.57429123,
+        "lon":  -86.21025085,
+        "addr":  "2200 BLUE STAR MEM DR",
+        "city":  "GANGES",
+        "zip":  "49416",
+        "providers":  ["Xfinity", "123.NET Inc .", "ACD.net", "Everstream"]
+    },
+    {
+        "clli":  "GRGRMIXI",
+        "name":  "Truestream Gregory",
+        "lat":  42.45860294,
+        "lon":  -84.08434577,
+        "addr":  "106 MAIN ST",
+        "city":  "GREGORY",
+        "zip":  "48137",
+        "providers":  ["Spectrum", "ACD.net", "Surf Internet"]
+    },
+    {
+        "clli":  "GRLDMIXG",
+        "name":  "Communications Grand Ledge",
+        "lat":  42.75308228,
+        "lon":  -84.74456024,
+        "addr":  "128 RIVER ST",
+        "city":  "GRAND LEDGE",
+        "zip":  "48837",
+        "providers":  ["Xfinity", "ACD.net", "Everstream", "HomeWorks Connect", "Metronet Holdings", "WOW Internet, Cable & Phone", "Zayo Network Services, LLC"]
+    },
+    {
+        "clli":  "GRLKMIXG",
+        "name":  "Grass Lake",
+        "lat":  42.24935913,
+        "lon":  -84.21136475,
+        "addr":  "201 S LAKE ST",
+        "city":  "GRASS LAKE",
+        "zip":  "49240",
+        "providers":  ["Xfinity", "Everstream", "Midwest Energy & Communications", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "GRYLMIXG",
+        "name":  "Phone Grayling",
+        "lat":  44.66170505,
+        "lon":  -84.71485466,
+        "addr":  "412 N JAMES ST",
+        "city":  "GRAYLING",
+        "zip":  "49738-1712",
+        "providers":  ["Spectrum", "ACD.net", "Cherry Capital Connection LLC", "Everstream", "Peninsula Fiber Network", "Truestream"]
+    },
+    {
+        "clli":  "GYLRMIXG",
+        "name":  "Everstream Gaylord",
+        "lat":  45.0276629,
+        "lon":  -84.6747076,
+        "addr":  "120 W MAIN ST",
+        "city":  "GAYLORD",
+        "zip":  "49735",
+        "providers":  ["Spectrum", "Xfinity", "ACD.net", "Clear Rate", "Everstream", "Peninsula Fiber Network", "Truestream", "Winn Telephone Company"]
+    },
+    {
+        "clli":  "HARTMIXG",
+        "name":  "Peninsula Fiber Network Hart",
+        "lat":  43.70025046,
+        "lon":  -86.35788001,
+        "addr":  "211 GRISWOLD ST",
+        "city":  "HART",
+        "zip":  "49420-1320",
+        "providers":  ["Spectrum", "ACD.net", "Everstream", "Peninsula Fiber Network", "Truestream"]
+    },
+    {
+        "clli":  "HBLKMIXG",
+        "name":  "Truestream Hubbard Lake",
+        "lat":  44.87002945,
+        "lon":  -83.612854,
+        "addr":  "6994 N GODFREY DR",
+        "city":  "HUBBARD LAKE",
+        "zip":  "49747",
+        "providers":  ["Spectrum", "Allband Media, LLC", "Ridge Tower Network LLC"]
+    },
+    {
+        "clli":  "HBTNMIXG",
+        "name":  "Hubbardston",
+        "lat":  43.09336178,
+        "lon":  -84.84098956,
+        "addr":  "209 N WASHINGTON ST",
+        "city":  "HUBBARDSTON",
+        "zip":  "48845",
+        "providers":  ["Spectrum", "HomeWorks Connect", "Point Broadband Fiber Holding LLC", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "HDSNMIXH",
+        "name":  "Phone Hudson",
+        "lat":  41.85401917,
+        "lon":  -84.3537674,
+        "addr":  "29 S MARKET ST",
+        "city":  "HUDSON",
+        "zip":  "49247",
+        "providers":  ["Xfinity", "ACD.net", "D&P Communications", "Everstream", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "HGLKMIXG",
+        "name":  "Truestream Higgins Lake",
+        "lat":  44.4908905,
+        "lon":  -84.77971649,
+        "addr":  "205 ROBBINS ST",
+        "city":  "HIGGINS LAKE",
+        "zip":  "48627",
+        "providers":  ["Spectrum", "ACD.net", "Cherry Capital Connection LLC", "Peninsula Fiber Network"]
+    },
+    {
+        "clli":  "HHLKMIXG",
+        "name":  "Phone Houghton Lake",
+        "lat":  null,
+        "lon":  null,
+        "addr":  "104 HOUGHTON LAKE DR/104 HOUGHTON AVE",
+        "city":  "HOUGHTON LAKE",
+        "zip":  "48629",
+        "providers":  ["Spectrum", "ACD.net", "Cherry Capital Connection LLC Houghton Point"]
+    },
+    {
+        "clli":  "HLMNMIXG",
+        "name":  "Peninsula Fiber Network Hillman",
+        "lat":  45.05851842,
+        "lon":  -83.90066274,
+        "addr":  "14959 STATE ST",
+        "city":  "HILLMAN",
+        "zip":  "47946",
+        "providers":  ["ACD.net", "Allband Communications Cooperative", "Allband Multimedia, LLC", "Everstream", "Presque Isle Connect"]
+    },
+    {
+        "clli":  "HLTNMIXG",
+        "name":  "Presque Isle Connect Holton",
+        "lat":  43.4092167,
+        "lon":  -86.0811384,
+        "addr":  "8560 HOLTON RD",
+        "city":  "HOLTON",
+        "zip":  "49425",
+        "providers":  ["Spectrum", "Xfinity", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "HMLCMIXG",
+        "name":  "Surf Internet Helmock",
+        "lat":  43.41370819,
+        "lon":  -84.23124391,
+        "addr":  "150 S ELM",
+        "city":  "HEMLOCK",
+        "zip":  "48626",
+        "providers":  ["Spectrum", "Air Advantage", "LakeNet LLC"]
+    },
+    {
+        "clli":  "HMTNMIXG",
+        "name":  "Surf Internet Hamilton",
+        "lat":  42.67735787,
+        "lon":  -86.00484096,
+        "addr":  "3534 WILLYARD",
+        "city":  "HAMILTON",
+        "zip":  "49419",
+        "providers":  ["Spectrum", "Xfinity", "123.NET Inc .", "ACD.net", "Acentek", "Everstream"]
+    },
+    {
+        "clli":  "HNVRMIXI",
+        "name":  "Everstream Hanover",
+        "lat":  42.13485293,
+        "lon":  -84.5182883,
+        "addr":  "8600 MOSCOW RD",
+        "city":  "HANOVER",
+        "zip":  "49241",
+        "providers":  ["Xfinity", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "HOMRMIXJ",
+        "name":  "Homer",
+        "lat":  42.14524247,
+        "lon":  -84.8088339,
+        "addr":  "114 S HILLSDALE ST",
+        "city":  "HOMER",
+        "zip":  "49245",
+        "providers":  ["Xfinity", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "HRBHMIXG",
+        "name":  "Phone Harbor Beach",
+        "lat":  43.84378351,
+        "lon":  -82.65257724,
+        "addr":  "134 S FIRST",
+        "city":  "HARBOR BEACH",
+        "zip":  "48441",
+        "providers":  ["Xfinity", "Air Advantage", "Pigeon Telephone Company", "TEC Fiber"]
+    },
+    {
+        "clli":  "HRFRMIXG",
+        "name":  "Truestream Hartford",
+        "lat":  42.20184243,
+        "lon":  -86.16637766,
+        "addr":  "419 S CENTER ST",
+        "city":  "HARTFORD",
+        "zip":  "49057",
+        "providers":  ["Xfinity", "Bloomingdale Communications, Inc.", "Everstream", "Midwest Energy & Communications", "Peninsula Fiber Network", "Sister Lakes Cable", "Surf Internet Helmock"]
+    },
+    {
+        "clli":  "HRVLMIXG",
+        "name":  "Fiber Harrisville",
+        "lat":  44.65671144,
+        "lon":  -83.29374857,
+        "addr":  "111 N 3RD",
+        "city":  "HARRISVILLE",
+        "zip":  "48740",
+        "providers":  ["Spectrum", "ACD.net", "Everstream", "Peninsula Fiber Network"]
+    },
+    {
+        "clli":  "HSPRMIXH",
+        "name":  "Hesperia",
+        "lat":  43.56996918,
+        "lon":  -86.03923035,
+        "addr":  "90 N DIVISION ST",
+        "city":  "HESPERIA",
+        "zip":  "49421",
+        "providers":  ["Spectrum", "NCATS", "Point Broadband Fiber Holding LLC", "Truestream"]
+    },
+    {
+        "clli":  "HWCYMIXG",
+        "name":  "Peninsula Fiber Network Howard City",
+        "lat":  43.39653795,
+        "lon":  -85.46915229,
+        "addr":  "114 1/2 EDGERTON ST",
+        "city":  "HOWARD CITY",
+        "zip":  "49329",
+        "providers":  ["Spectrum", "ACD.net", "Point Broadband Fiber Holding LLC", "Truestream"]
+    },
+    {
+        "clli":  "IDAAMIXH",
+        "name":  "Communications Ida",
+        "lat":  41.90816,
+        "lon":  -83.57349962,
+        "addr":  "3020 LEWIS AVE",
+        "city":  "IDA",
+        "zip":  "48140",
+        "providers":  ["Spectrum", "Xfinity", "ACD.net", "Buckeye Cablesystem", "Buckeye Telesystem", "D&P Communications", "Everstream"]
+    },
+    {
+        "clli":  "IMCYMIXH",
+        "name":  "Everstream Imlay City",
+        "lat":  43.02588272,
+        "lon":  -83.07654572,
+        "addr":  "155 E 4TH ST",
+        "city":  "IMLAY CITY",
+        "zip":  "48444",
+        "providers":  ["Spectrum", "Xfinity", "Highline Internet", "Mercury Fiber"]
+    },
+    {
+        "clli":  "ITHCMIXG",
+        "name":  "Mercury Fiber Ithaca",
+        "lat":  43.29079056,
+        "lon":  -84.60668945,
+        "addr":  "115 E NEWARK ST",
+        "city":  "ITHACA",
+        "zip":  "48847",
+        "providers":  ["Spectrum", "CMS Internet", "Everstream", "HomeWorks Connect", "LakeNet LLC", "Point Broadband Fiber Holding LLC", "Winn Telephone Company"]
+    },
+    {
+        "clli":  "JDDOMIXG",
+        "name":  "Winn Telephone Company Jeddo",
+        "lat":  43.1519305,
+        "lon":  -82.58474819,
+        "addr":  "6030 JEDDO RD",
+        "city":  "JEDDO",
+        "zip":  "48032",
+        "providers":  ["Xfinity", "Highline Internet", "Mercury Fiber", "Pigeon Telephone Company"]
+    },
+    {
+        "clli":  "KGTNMIXG",
+        "name":  "Pigeon Telephone Company Kingston",
+        "lat":  43.41331244,
+        "lon":  -83.18436004,
+        "addr":  "3491 PINE",
+        "city":  "KINGSTON",
+        "zip":  "48741",
+        "providers":  ["Spectrum", "Air Advantage", "AT&T", "Pigeon Telephone Company", "TEC Fiber"]
+    },
+    {
+        "clli":  "LCHNMIXG",
+        "name":  "Fiber Lachine",
+        "lat":  45.06003014,
+        "lon":  -83.7469657,
+        "addr":  "HWY 32 & HWY 65",
+        "city":  "LACHINE",
+        "zip":  "49753",
+        "providers":  ["Spectrum", "ACD.net", "Allband Multimedia, LLC", "Presque Isle Connect"]
+    },
+    {
+        "clli":  "LCTAMIXI",
+        "name":  "Presque Isle Connect Lacota",
+        "lat":  null,
+        "lon":  null,
+        "addr":  "1581 COHWY 681",
+        "city":  "LACOTA",
+        "zip":  "49056",
+        "providers":  ["Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "LDNGMIXG",
+        "name":  "Buckeye Cablesystem Ludington",
+        "lat":  43.95813011,
+        "lon":  -86.44517921,
+        "addr":  "317 N ROWE ST",
+        "city":  "LUDINGTON",
+        "zip":  "49431",
+        "providers":  ["Spectrum", "123.NET Inc.", "ACD.net", "Everstream", "Peninsula Fiber Network"]
+    },
+    {
+        "clli":  "LKVWMIXG",
+        "name":  "Phone Lakeview",
+        "lat":  43.44188936,
+        "lon":  -85.28003633,
+        "addr":  "312 WASHINGTON",
+        "city":  "LAKEVIEW",
+        "zip":  "48850",
+        "providers":  ["Spectrum", "HomeWorks Connect", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "LLALMIXG",
+        "name":  "Surf Internet Long Lake",
+        "lat":  44.44079971,
+        "lon":  -83.87896729,
+        "addr":  "2842 HINKS PARK RD",
+        "city":  "LONG LAKE",
+        "zip":  "48743",
+        "providers":  ["Spectrum", "Presque Isle Connect Lost Peninsula"]
+    },
+    {
+        "clli":  "LMVLMIXI",
+        "name":  "Lambertville",
+        "lat":  41.77008057,
+        "lon":  -83.64313507,
+        "addr":  "3905 CONSEAR RD",
+        "city":  "LAMBERTVILLE",
+        "zip":  "48144",
+        "providers":  ["Spectrum", "Xfinity", "Buckeye Cablesystem", "D&P Communications", "Midwest Energy & Communications Buckeye Telesystem"]
+    },
+    {
+        "clli":  "LNBGMIXG",
+        "name":  "Communications Laingsburg",
+        "lat":  42.8910394,
+        "lon":  -84.35353562,
+        "addr":  "204 W GRAND RIVER",
+        "city":  "LAINGSBURG",
+        "zip":  "48848",
+        "providers":  ["Spectrum", "DayStarr", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "LNCLMIXG",
+        "name":  "Truestream Lincoln",
+        "lat":  44.68286425,
+        "lon":  -83.4114318,
+        "addr":  "111 E HAWLEY ST",
+        "city":  "LINCOLN",
+        "zip":  "48742",
+        "providers":  ["Spectrum", "ACD.net", "Allband Multimedia, LLC"]
+    },
+    {
+        "clli":  "LNDNMIXG",
+        "name":  "Linden",
+        "lat":  42.81416321,
+        "lon":  -83.78187561,
+        "addr":  "115 S BRIDGE ST",
+        "city":  "LINDEN",
+        "zip":  "48451",
+        "providers":  ["Spectrum", "Xfinity", "Surf Internet"]
+    },
+    {
+        "clli":  "LPTNMIXJ",
+        "name":  "Peninsula Fiber Network Lupton",
+        "lat":  44.37716089,
+        "lon":  -83.98405664,
+        "addr":  "1474 SHADY SHORES RD",
+        "city":  "LUPTON",
+        "zip":  "48635",
+        "providers":  ["Spectrum", "ACD.net", "Everstream"]
+    },
+    {
+        "clli":  "LSTNMIXG",
+        "name":  "Communications Lewiston",
+        "lat":  44.889318,
+        "lon":  -84.308209,
+        "addr":  "ALEXANDER ST",
+        "city":  "LEWISTON",
+        "zip":  "49756",
+        "providers":  ["Spectrum", "ACD.net", "Peninsula Fiber Network", "Point Broadband Fiber Holding LLC", "Truestream"]
+    },
+    {
+        "clli":  "LWRNMIXI",
+        "name":  "Communications Buckeye Telesystem Lawrence",
+        "lat":  42.21930832,
+        "lon":  -86.05174877,
+        "addr":  "128 W ST JOSEPH ST",
+        "city":  "LAWRENCE",
+        "zip":  "49064",
+        "providers":  ["Xfinity", "Bloomingdale Communications, Inc.", "Everstream", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "LWTNMIXG",
+        "name":  "Communications Lawton",
+        "lat":  42.16849588,
+        "lon":  -85.85081108,
+        "addr":  "200 N WEST ST",
+        "city":  "LAWTON",
+        "zip":  "49065",
+        "providers":  ["Xfinity", "Bloomingdale Communications, Inc.", "Everstream", "Mediacom Xtream", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "MCBRMIXG",
+        "name":  "1 MCBRIDE CENTRAL OFFICE",
+        "lat":  43.41030121,
+        "lon":  -85.04419708,
+        "addr":  "4302 N FIRST ST",
+        "city":  "MCBRIDE",
+        "zip":  "48852",
+        "providers":  ["Spectrum", "HomeWorks Connect"]
+    },
+    {
+        "clli":  "MDTNMIXG",
+        "name":  "Spectrum Middleton",
+        "lat":  43.18140793,
+        "lon":  -84.70950317,
+        "addr":  "115 ELM ST",
+        "city":  "MIDDLETON",
+        "zip":  "48856",
+        "providers":  ["CMS Internet", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "MIOOMIXG",
+        "name":  "Fiber Mio",
+        "lat":  44.64988187,
+        "lon":  -84.12744284,
+        "addr":  "310 S CASS ST",
+        "city":  "MIO",
+        "zip":  "48647",
+        "providers":  ["Spectrum", "ACD.net", "Everstream", "Peninsula Fiber Network", "Point Broadband Fiber Holding LLC", "Truestream"]
+    },
+    {
+        "clli":  "MLFRMIXE",
+        "name":  "Milford",
+        "lat":  42.58987293,
+        "lon":  -83.59899737,
+        "addr":  "324 UNION ST",
+        "city":  "MILFORD",
+        "zip":  "48381",
+        "providers":  ["Xfinity", "123.NET Inc .", "Clear Rate", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "MMPHMIXG",
+        "name":  "HomeWorks Connect Memphis",
+        "lat":  42.8959754,
+        "lon":  -82.7666565,
+        "addr":  "35181 POTTER ST",
+        "city":  "MEMPHIS",
+        "zip":  "48041",
+        "providers":  ["Xfinity"]
+    },
+    {
+        "clli":  "MNCYMIXG",
+        "name":  "Phone Minden City",
+        "lat":  43.67160849,
+        "lon":  -82.77142458,
+        "addr":  "1704 MAIN",
+        "city":  "MINDEN CITY",
+        "zip":  "48456",
+        "providers":  ["Xfinity", "Air Advantage", "Highline Internet", "M3 Wireless Inc.", "Pigeon Telephone Company", "TEC Fiber"]
+    },
+    {
+        "clli":  "MNDNMIXG",
+        "name":  "Xfinity Mendon",
+        "lat":  42.00693704,
+        "lon":  -85.44951305,
+        "addr":  "106 N NOTTAWA ST",
+        "city":  "MENDON",
+        "zip":  "49072",
+        "providers":  ["Xfinity", "Mercury Fiber", "Metronet Holdings", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "MNPLMIXG",
+        "name":  "Pleasant",
+        "lat":  43.60246952,
+        "lon":  -84.77643003,
+        "addr":  "303-305 MAIN ST",
+        "city":  "MOUNT PLEASANT",
+        "zip":  "48858",
+        "providers":  ["Spectrum", "123.NET Inc.", "ACD.net", "CMS Internet", "Everstream", "HomeWorks Connect", "Peninsula Fiber Network", "Point Broadband Fiber Holding LLC", "US Signal Company", "Winn Telephone Company"]
+    },
+    {
+        "clli":  "MNTHMIXI",
+        "name":  "Connect Munith",
+        "lat":  42.39161745,
+        "lon":  -84.25055087,
+        "addr":  "206 MAIN ST",
+        "city":  "MUNITH",
+        "zip":  "49259",
+        "providers":  ["Xfinity", "HomeWorks Connect", "Midwest Energy & Communications", "WOW Internet, Cable & Phone Muskegon"]
+    },
+    {
+        "clli":  "MPRPMIXG",
+        "name":  "Everstream Maple Rapids",
+        "lat":  43.10442992,
+        "lon":  -84.69225705,
+        "addr":  "121 S MAPLE",
+        "city":  "MAPLE RAPIDS",
+        "zip":  "48853",
+        "providers":  ["CMS Internet", "HomeWorks Connect", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "MRCLMIXG",
+        "name":  "Marcellus",
+        "lat":  42.02742845,
+        "lon":  -85.81514977,
+        "addr":  "146 N CENTER ST",
+        "city":  "MARCELLUS",
+        "zip":  "76825",
+        "providers":  ["Xfinity", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "MRNCMIXI",
+        "name":  "Morenci",
+        "lat":  41.71858884,
+        "lon":  -84.21767101,
+        "addr":  "221 BAKER ST",
+        "city":  "MORENCI",
+        "zip":  "49256",
+        "providers":  ["Spectrum", "D&P Communications", "Midwest Energy & Communications", "Sand Creek Telephone Company Mt . Pleasant"]
+    },
+    {
+        "clli":  "MRRLMIXG",
+        "name":  "Communications Merrill",
+        "lat":  43.40919113,
+        "lon":  -84.33181,
+        "addr":  "204 W ALICE",
+        "city":  "MERRILL",
+        "zip":  "48637",
+        "providers":  ["Spectrum", "Chapin Telephone Company", "LakeNet LLC"]
+    },
+    {
+        "clli":  "MSKGMIXK",
+        "name":  "Everstream Muskegon Main",
+        "lat":  43.237422,
+        "lon":  -86.246177,
+        "addr":  "860 TERRACE ST",
+        "city":  "MUSKEGON",
+        "zip":  "49440",
+        "providers":  ["Xfinity", "123.NET Inc.", "ACD.net", "Everstream", "Peninsula Fiber Network Muskegon North"]
+    },
+    {
+        "clli":  "MSKGMIXL",
+        "name":  "Peninsula Fiber Network Muskegon North",
+        "lat":  43.25679016,
+        "lon":  -86.26819611,
+        "addr":  "410 FLEMING ST",
+        "city":  "MUSKEGON",
+        "zip":  "49445",
+        "providers":  ["Spectrum", "Xfinity", "ACD.net", "Everstream Muskegon Seminole"]
+    },
+    {
+        "clli":  "MSKGMIXM",
+        "name":  "Everstream Muskegon South",
+        "lat":  43.15821838,
+        "lon":  -86.24505615,
+        "addr":  "5214 S MARTIN RD",
+        "city":  "MUSKEGON",
+        "zip":  "49441",
+        "providers":  ["Spectrum", "Xfinity", "ACD.net", "Everstream Muskegon Wolf Lake"]
+    },
+    {
+        "clli":  "MSKGMIXN",
+        "name":  "Everstream Muskegon East",
+        "lat":  43.23178482,
+        "lon":  -86.1824646,
+        "addr":  "1131 BARLOW ST",
+        "city":  "MUSKEGON",
+        "zip":  "49442",
+        "providers":  ["Xfinity", "123.NET Inc.", "ACD.net", "Everstream Muskegon Heights"]
+    },
+    {
+        "clli":  "MSKGMIXQ",
+        "name":  "Phone Muskegon Dalton",
+        "lat":  43.32629554,
+        "lon":  -86.26710199,
+        "addr":  "3850 N WHITEHALL RD",
+        "city":  "DALTON",
+        "zip":  "49445",
+        "providers":  ["Spectrum", "Xfinity", "ACD.net", "Everstream Muskegon East"]
+    },
+    {
+        "clli":  "MSKGMIXR",
+        "name":  "Everstream Muskegon Lakeside",
+        "lat":  43.21678543,
+        "lon":  -86.28829193,
+        "addr":  "1831 LAKESHORE DR",
+        "city":  "MUSKEGON",
+        "zip":  "49441-1606",
+        "providers":  ["Xfinity", "ACD.net", "Everstream Muskegon Main"]
+    },
+    {
+        "clli":  "MSKHMIXP",
+        "name":  "Everstream Muskegon Heights",
+        "lat":  43.19901657,
+        "lon":  -86.24450684,
+        "addr":  "2908 PECK ST",
+        "city":  "MUSKEGON",
+        "zip":  "49444",
+        "providers":  ["Xfinity", "ACD.net", "Everstream Muskegon Lakeside"]
+    },
+    {
+        "clli":  "MTGMMIXI",
+        "name":  "Truestream Montgomery",
+        "lat":  41.77752502,
+        "lon":  -84.80078593,
+        "addr":  "211 W HAKE ST",
+        "city":  "MONTGOMERY",
+        "zip":  "49255",
+        "providers":  ["Spectrum", "DMCI Broadband LLC"]
+    },
+    {
+        "clli":  "MTMOMIXG",
+        "name":  "Metamora",
+        "lat":  42.94136047,
+        "lon":  -83.28694153,
+        "addr":  "124 E HIGH",
+        "city":  "METAMORA",
+        "zip":  "48455",
+        "providers":  ["Spectrum"]
+    },
+    {
+        "clli":  "MTWNMIXG",
+        "name":  "Communications Mattawan",
+        "lat":  42.2110974,
+        "lon":  -85.7852599,
+        "addr":  "57174 S MAIN ST",
+        "city":  "MATTAWAN",
+        "zip":  "49071",
+        "providers":  ["Spectrum", "Xfinity", "AT&T", "Bloomingdale Communications, Inc.", "Everstream", "Mediacom Xtream", "Metronet Holdings", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "MUIRMIXG",
+        "name":  "Winn Telephone Company Muir",
+        "lat":  42.99596407,
+        "lon":  -84.93907996,
+        "addr":  "121 IONIA ST",
+        "city":  "MUIR",
+        "zip":  "48860",
+        "providers":  ["Spectrum", "HomeWorks Connect"]
+    },
+    {
+        "clli":  "MYBEMIXH",
+        "name":  "Communications Maybee",
+        "lat":  42.00489856,
+        "lon":  -83.51959996,
+        "addr":  "7872 BLUEBUSH RD",
+        "city":  "MAYBEE",
+        "zip":  "48159",
+        "providers":  ["Spectrum", "Xfinity"]
+    },
+    {
+        "clli":  "NADMMIXI",
+        "name":  "Truestream North Adams",
+        "lat":  41.97075301,
+        "lon":  -84.52458659,
+        "addr":  "123 E. MAIN ST",
+        "city":  "NORTH ADAMS",
+        "zip":  "49262",
+        "providers":  ["Xfinity"]
+    },
+    {
+        "clli":  "NBRNMIXG",
+        "name":  "Xfinity North Branch",
+        "lat":  43.22885357,
+        "lon":  -83.1944599,
+        "addr":  "6716 SAGINAW",
+        "city":  "NORTH BRANCH",
+        "zip":  "48461",
+        "providers":  ["Spectrum", "Air Advantage", "Northern Broadband"]
+    },
+    {
+        "clli":  "NRSHMIXG",
+        "name":  "Everstream Muskegon Seminole",
+        "lat":  43.18720892,
+        "lon":  -86.28263399,
+        "addr":  "1545 W SEMINOLE RD",
+        "city":  "MUSKEGON",
+        "zip":  "49441",
+        "providers":  ["Xfinity", "Everstream Muskegon South"]
+    },
+    {
+        "clli":  "ONDGMIXI",
+        "name":  "Truestream Onondaga",
+        "lat":  42.4661377,
+        "lon":  -84.5410094,
+        "addr":  "3975 CRAIN RD",
+        "city":  "ONONDAGA",
+        "zip":  "49264",
+        "providers":  ["Xfinity", "HomeWorks Connect", "Midwest Energy & Communications", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "ONSTMIXI",
+        "name":  "Phone Onsted",
+        "lat":  42.02891104,
+        "lon":  -84.18983705,
+        "addr":  "9901 ONSTED HWY",
+        "city":  "ONSTED",
+        "zip":  "49265",
+        "providers":  ["Xfinity", "D&P Communications", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "ONWYMIXG",
+        "name":  "Northern Broadband Onaway",
+        "lat":  45.36022186,
+        "lon":  -84.22251892,
+        "addr":  "110 N FIRST ST",
+        "city":  "ONAWAY",
+        "zip":  "49765",
+        "providers":  ["Spectrum", "ACD.net", "Everstream", "Peninsula Fiber Network", "Presque Isle Connect", "Truestream"]
+    },
+    {
+        "clli":  "ORVLMIXG",
+        "name":  "Communications Ortonville",
+        "lat":  42.85416842,
+        "lon":  -83.45119759,
+        "addr":  "113 NARREN ST",
+        "city":  "ORTONVILLE",
+        "zip":  "48462",
+        "providers":  ["Spectrum", "Xfinity", "123.NET Inc .", "Everstream Osseo"]
+    },
+    {
+        "clli":  "OSNKMIXG",
+        "name":  "Ossineke",
+        "lat":  44.90461797,
+        "lon":  -83.44402872,
+        "addr":  "11731 OSSINEKE RD",
+        "city":  "OSSINEKE",
+        "zip":  "49766",
+        "providers":  ["Spectrum", "ACD.net", "Peninsula Fiber Network"]
+    },
+    {
+        "clli":  "OSSEMIXI",
+        "name":  "Everstream Osseo",
+        "lat":  41.87133195,
+        "lon":  -84.51547223,
+        "addr":  "6973 HUDSON RD",
+        "city":  "PITTSFORD",
+        "zip":  "49266",
+        "providers":  ["Xfinity", "ACD.net", "DMCI Broadband LLC"]
+    },
+    {
+        "clli":  "OTVLMIXG",
+        "name":  "Peninsula Fiber Network Otisville",
+        "lat":  43.16697693,
+        "lon":  -83.51847839,
+        "addr":  "146 W PINE",
+        "city":  "OTISVILLE",
+        "zip":  "48463",
+        "providers":  ["Spectrum", "Xfinity"]
+    },
+    {
+        "clli":  "OVIDMIXG",
+        "name":  "Xfinity Ovid",
+        "lat":  43.00684357,
+        "lon":  -84.37294006,
+        "addr":  "128 WILLIAMS ST",
+        "city":  "OVID",
+        "zip":  "48831",
+        "providers":  ["Spectrum", "DayStarr"]
+    },
+    {
+        "clli":  "OWSOMIXH",
+        "name":  "Owosso",
+        "lat":  42.99854837,
+        "lon":  -84.17228132,
+        "addr":  "224 W EXCHANGE",
+        "city":  "OWOSSO",
+        "zip":  "48867",
+        "providers":  ["Spectrum", "Xfinity", "Chapin Telephone Company", "DayStarr"]
+    },
+    {
+        "clli":  "PALOMIXG",
+        "name":  "Palo",
+        "lat":  43.09326935,
+        "lon":  -85.22506714,
+        "addr":  "4545 E DIVISION",
+        "city":  "PALO",
+        "zip":  "48870",
+        "providers":  ["Spectrum", "HomeWorks Connect", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "PARMMIXJ",
+        "name":  "Parma",
+        "lat":  42.25922012,
+        "lon":  -84.59888458,
+        "addr":  "114 E MAIN",
+        "city":  "PARMA",
+        "zip":  "49269",
+        "providers":  ["Xfinity", "Everstream", "Midwest Energy & Communications", "Springport Telephone Company", "Surf Internet", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "PLMNMIXI",
+        "name":  "Peninsula Fiber Network Pullman",
+        "lat":  42.48390287,
+        "lon":  -86.09039471,
+        "addr":  "5598 109TH AVE",
+        "city":  "PULLMAN",
+        "zip":  "49450",
+        "providers":  ["123.NET Inc .", "Bloomingdale Communications, Inc.", "Everstream", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "PNTWMIXG",
+        "name":  "Communications Pentwater",
+        "lat":  43.78224291,
+        "lon":  -86.4295312,
+        "addr":  "33 RUTLEDGE",
+        "city":  "PENTWATER",
+        "zip":  "49449",
+        "providers":  ["Spectrum", "ACD.net", "Truestream"]
+    },
+    {
+        "clli":  "POMPMIXG",
+        "name":  "Truestream Pompeii",
+        "lat":  43.185442,
+        "lon":  -84.600585,
+        "addr":  "116 FULTON",
+        "city":  "POMPEII",
+        "zip":  "48874",
+        "providers":  ["CMS Internet", "HomeWorks Connect", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "POSNMIXG",
+        "name":  "Posen",
+        "lat":  45.24117661,
+        "lon":  -83.68305969,
+        "addr":  "1/2 BLK OFF M65",
+        "city":  "POSEN",
+        "zip":  "49776",
+        "providers":  ["Spectrum", "ACD.net", "Peninsula Fiber Network", "Presque Isle Connect"]
+    },
+    {
+        "clli":  "PRSCMIXP",
+        "name":  "Waldron Telephone Company Prescott",
+        "lat":  44.18958597,
+        "lon":  -84.00591396,
+        "addr":  "5253 S HENDERSON LAKE RD",
+        "city":  "PRESCOTT",
+        "zip":  "48756",
+        "providers":  ["Spectrum", "Point Broadband Fiber Holding LLC", "Vogtmann Engineering Inc Prudenville"]
+    },
+    {
+        "clli":  "PRVLMIXJ",
+        "name":  "Presque Isle Connect Prattville",
+        "lat":  41.78203717,
+        "lon":  -84.40407582,
+        "addr":  "12640 PRATTVILLE RD",
+        "city":  "PRATTVILLE",
+        "zip":  "49273",
+        "providers":  ["Waldron Telephone Company"]
+    },
+    {
+        "clli":  "PWPWMIXG",
+        "name":  "Phone Paw Paw",
+        "lat":  42.21692657,
+        "lon":  -85.89154053,
+        "addr":  "130 S KALAMAZOO ST",
+        "city":  "PAW PAW",
+        "zip":  "49079",
+        "providers":  ["Xfinity", "Bloomingdale Communications, Inc.", "Everstream", "Mediacom Xtream", "Metronet Holdings", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "QNCYMIXG",
+        "name":  "Communications Quincy",
+        "lat":  41.94408417,
+        "lon":  -84.88500394,
+        "addr":  "2 MAIDEN LN",
+        "city":  "QUINCY",
+        "zip":  "49082",
+        "providers":  ["Spectrum", "ACD.net", "DMCI Broadband LLC"]
+    },
+    {
+        "clli":  "RCMDMIXG",
+        "name":  "Richmond",
+        "lat":  42.81147385,
+        "lon":  -82.75833893,
+        "addr":  "35641 MONROE ST",
+        "city":  "RICHMOND",
+        "zip":  "48062",
+        "providers":  ["Xfinity", "Duke Broadband Inc .", "Everstream"]
+    },
+    {
+        "clli":  "RDNGMIXG",
+        "name":  "Truestream Reading",
+        "lat":  41.83606021,
+        "lon":  -84.74844731,
+        "addr":  "120 W ELM ST",
+        "city":  "READING",
+        "zip":  "49274",
+        "providers":  ["Spectrum", "Xfinity", "DMCI Broadband LLC"]
+    },
+    {
+        "clli":  "RGCYMIXG",
+        "name":  "Communications Rogers City",
+        "lat":  45.41850105,
+        "lon":  -83.81638773,
+        "addr":  "126 4TH ST",
+        "city":  "ROGERS CITY",
+        "zip":  "49779",
+        "providers":  ["Spectrum", "ACD.net", "Cherry Capital Connection LLC", "Everstream", "Peninsula Fiber Network", "Presque Isle Connec t"]
+    },
+    {
+        "clli":  "RMUSMIXG",
+        "name":  "Remus",
+        "lat":  43.59765731,
+        "lon":  -85.14667824,
+        "addr":  "184 W MICHIGAN",
+        "city":  "REMUS",
+        "zip":  "49340",
+        "providers":  ["Spectrum", "Blanchard Telephone Association Inc.", "Everstream", "HomeWorks Connect", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "RNKNMIXG",
+        "name":  "Rankin",
+        "lat":  42.91438937,
+        "lon":  -83.75117719,
+        "addr":  "4022 GRAND BLANC",
+        "city":  "RANKIN",
+        "zip":  "48473",
+        "providers":  ["Spectrum", "Xfinity", "123.NET Inc ."]
+    },
+    {
+        "clli":  "RNSMMIXJ",
+        "name":  "Ransom",
+        "lat":  41.77636242,
+        "lon":  -84.53445118,
+        "addr":  "10280 SOUTH BIRD LAKE RD",
+        "city":  "RANSOM",
+        "zip":  "49266",
+        "providers":  ["Xfinity", "DMCI Broadband LLC"]
+    },
+    {
+        "clli":  "RSCMMIXG",
+        "name":  "Presque Isle Connect Roscommon",
+        "lat":  44.49940324,
+        "lon":  -84.59177345,
+        "addr":  "103 N MAIN ST",
+        "city":  "ROSCOMMON",
+        "zip":  "48653",
+        "providers":  ["Spectrum", "ACD.net", "Cherry Capital Connection LLC", "Peninsula Fiber Network", "Point Broadband Fiber Holding LLC", "Truestream"]
+    },
+    {
+        "clli":  "RSCYMIXJ",
+        "name":  "Truestream Rose City",
+        "lat":  44.42155212,
+        "lon":  -84.11574103,
+        "addr":  "123 E MAIN ST",
+        "city":  "ROSE CITY",
+        "zip":  "48654",
+        "providers":  ["Spectrum", "ACD.net", "Everstream", "Peninsula Fiber Network", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "RVDLMIXG",
+        "name":  "Everstream Riverdale",
+        "lat":  43.43009186,
+        "lon":  -84.83614349,
+        "addr":  "6640 LUMBERJACK",
+        "city":  "RIVERDALE",
+        "zip":  "48877",
+        "providers":  ["Spectrum", "CMS Internet", "HomeWorks Connect", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "RVJTMIXI",
+        "name":  "Rives Junction",
+        "lat":  42.38589294,
+        "lon":  -84.48669657,
+        "addr":  "5441 WOOD RD",
+        "city":  "RIVES JUNCTION",
+        "zip":  "49277",
+        "providers":  ["Xfinity", "123.NET Inc.", "HomeWorks Connect", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "RVNNMIXG",
+        "name":  "Ravenna",
+        "lat":  43.19001451,
+        "lon":  -85.94066776,
+        "addr":  "3483 THOMAS",
+        "city":  "RAVENNA",
+        "zip":  "49451",
+        "providers":  ["Spectrum", "Xfinity", "Truestream"]
+    },
+    {
+        "clli":  "SALNMIXG",
+        "name":  "Saline",
+        "lat":  42.16537857,
+        "lon":  -83.78076172,
+        "addr":  "200 S ANN ARBOR ST",
+        "city":  "SALINE",
+        "zip":  "48176",
+        "providers":  ["Xfinity", "123.NET Inc.", "ACD.net", "AT&T", "Everstream", "Mercury Fiber", "Metronet Holdings", "Midwest Energy & Communications", "Rural Reach"]
+    },
+    {
+        "clli":  "SCHLMIXG",
+        "name":  "Communications Schoolcraft",
+        "lat":  42.11460896,
+        "lon":  -85.63806027,
+        "addr":  "135 N HAYWARD ST",
+        "city":  "SCHOOLCRAFT",
+        "zip":  "49087",
+        "providers":  ["Spectrum", "Xfinity", "Everstream", "Mercury Fiber", "Metronet Holdings", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "SDNYMIXG",
+        "name":  "Sidney",
+        "lat":  43.250103,
+        "lon":  -85.13414764,
+        "addr":  "3052 W SIDNEY",
+        "city":  "SIDNEY",
+        "zip":  "48885",
+        "providers":  ["CMS Internet", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "SGTCMIXG",
+        "name":  "Rural Reach Saugatuck",
+        "lat":  42.65949631,
+        "lon":  -86.20503998,
+        "addr":  "615 WATER ST",
+        "city":  "SAUGATUCK",
+        "zip":  "49453",
+        "providers":  ["Xfinity", "123.NET Inc .", "Everstream"]
+    },
+    {
+        "clli":  "SHLBMIXG",
+        "name":  "Communications Shelby",
+        "lat":  43.61415557,
+        "lon":  -86.36129895,
+        "addr":  "101 E 5TH ST",
+        "city":  "SHELBY",
+        "zip":  "49455",
+        "providers":  ["Spectrum", "Xfinity", "ACD.net", "Cherry Capital Connection LLC", "Truestream"]
+    },
+    {
+        "clli":  "SHPHMIXG",
+        "name":  "Truestream Shepherd",
+        "lat":  43.52432504,
+        "lon":  -84.69355725,
+        "addr":  "238 W WRIGHT",
+        "city":  "SHEPHERD",
+        "zip":  "48883",
+        "providers":  ["Spectrum", "CMS Internet", "HomeWorks Connect", "Point Broadband Fiber Holding LLC", "Winn Telephone Company"]
+    },
+    {
+        "clli":  "SHRDMIXG",
+        "name":  "Winn Telephone Company Sheridan",
+        "lat":  43.211124,
+        "lon":  -85.072661,
+        "addr":  "115 E SMITH",
+        "city":  "SHERIDAN",
+        "zip":  "48884",
+        "providers":  ["Spectrum", "CMS Internet", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "SMCKMIXG",
+        "name":  "Smiths Creek",
+        "lat":  42.91552328,
+        "lon":  -82.60375969,
+        "addr":  "430 HENRY",
+        "city":  "SMITHS CREEK",
+        "zip":  "48074",
+        "providers":  ["Xfinity"]
+    },
+    {
+        "clli":  "SNTNMIXG",
+        "name":  "Winn Telephone Company Stanton",
+        "lat":  43.29346085,
+        "lon":  -85.07918549,
+        "addr":  "226 E DAY",
+        "city":  "STANTON",
+        "zip":  "48888",
+        "providers":  ["Spectrum", "CMS Internet", "HomeWorks Connect", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "SOHNMIXH",
+        "name":  "Xfinity South Haven",
+        "lat":  42.40153156,
+        "lon":  -86.27228402,
+        "addr":  "351 SCHOOL ST",
+        "city":  "SOUTH HAVEN",
+        "zip":  "49090",
+        "providers":  ["Xfinity", "123NET Inc.", "ACD.net", "Bloomingdale Communications, Inc.", "Everstream", "Midwest Energy & Communications", "Surf Internet St Johns"]
+    },
+    {
+        "clli":  "SRLKMIXG",
+        "name":  "Sister Lakes",
+        "lat":  42.27952576,
+        "lon":  -83.79408264,
+        "addr":  "4401 M-152",
+        "city":  "SISTER LAKES",
+        "zip":  "48162",
+        "providers":  ["Xfinity", "ACD.net", "Midwest Energy & Communications", "Sister Lakes Cable"]
+    },
+    {
+        "clli":  "STBRMIXI",
+        "name":  "Stockbridge",
+        "lat":  42.45225819,
+        "lon":  -84.18046474,
+        "addr":  "202 N CLINTON ST",
+        "city":  "STOCKBRIDGE",
+        "zip":  "49285",
+        "providers":  ["Spectrum", "ACD.net", "HomeWorks Connect", "Surf Internet", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "STJHMIXG",
+        "name":  "Surf Internet St Johns",
+        "lat":  43.00104141,
+        "lon":  -84.55672455,
+        "addr":  "202 E STATE ST",
+        "city":  "SAINT JOHNS",
+        "zip":  "48879",
+        "providers":  ["Spectrum", "Xfinity", "ACD.net", "DayStarr", "Everstream", "HomeWorks Connect", "Westphalia Broadband Inc.", "Westphalia Telephone Company", "Zayo Group LLC St . Louis"]
+    },
+    {
+        "clli":  "STLSMIXG",
+        "name":  "Louis",
+        "lat":  43.41093801,
+        "lon":  -84.60880481,
+        "addr":  "325 N MILL ST",
+        "city":  "SAINT LOUIS",
+        "zip":  "48880",
+        "providers":  ["Spectrum", "Everstream", "HomeWorks Connect", "LakeNet LLC", "Point Broadband Fiber Holding LLC", "Winn Telephone Company"]
+    },
+    {
+        "clli":  "STNGMIXJ",
+        "name":  "Truestream Sterling",
+        "lat":  44.03137855,
+        "lon":  -84.02040191,
+        "addr":  "123 LINCOLN ST",
+        "city":  "STERLING",
+        "zip":  "48659",
+        "providers":  ["Everstream", "Vogtmann Engineering Inc ."]
+    },
+    {
+        "clli":  "STRGMIXG",
+        "name":  "Phone Sturgis",
+        "lat":  41.79909803,
+        "lon":  -85.4174117,
+        "addr":  "109 S MONROE ST",
+        "city":  "STURGIS",
+        "zip":  "49091",
+        "providers":  ["Spectrum", "Xfinity", "ACD.net", "Everstream", "Mercury Fiber", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "STWDMIXG",
+        "name":  "Stanwood",
+        "lat":  43.58071513,
+        "lon":  -85.45095205,
+        "addr":  "122 FRONT ST",
+        "city":  "STANWOOD",
+        "zip":  "49346",
+        "providers":  ["Spectrum", "ACD.net", "HomeWorks Connect", "Point Broadband Fiber Holding LLC", "Truestream"]
+    },
+    {
+        "clli":  "SWCRMIXG",
+        "name":  "Communications Swartz Creek",
+        "lat":  42.956069,
+        "lon":  -83.834403,
+        "addr":  "8063 INGALLS ST",
+        "city":  "SWARTZ CREEK",
+        "zip":  "48473",
+        "providers":  ["Spectrum", "Xfinity", "123.NET Inc.", "Everstream", "Lennon Telephone Company", "Metronet Holdings", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "SWYRMIXI",
+        "name":  "Everstream Sawyer",
+        "lat":  41.89031601,
+        "lon":  -86.60461426,
+        "addr":  "12639 RED ARROW HWY",
+        "city":  "SAWYER",
+        "zip":  "49125",
+        "providers":  ["Xfinity", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "SXLKMIXG",
+        "name":  "Sister Lakes Cable Six Lakes",
+        "lat":  43.4301796,
+        "lon":  -85.14774323,
+        "addr":  "2180 DANIELS ST",
+        "city":  "SIX LAKES",
+        "zip":  "48886",
+        "providers":  ["Spectrum", "CMS Internet", "HomeWorks Connect", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "TCMSMIXG",
+        "name":  "Phone Tecumseh",
+        "lat":  42.00404361,
+        "lon":  -83.94316301,
+        "addr":  "224 E CHICAGO ST",
+        "city":  "TECUMSEH",
+        "zip":  "49286",
+        "providers":  ["Xfinity", "D&P Communic a tions", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "THRRMIXH",
+        "name":  "Mercury Fiber Corey Lake",
+        "lat":  41.93866007,
+        "lon":  -85.73183164,
+        "addr":  "11480 COON HOLLOW RD",
+        "city":  "COREY LAKE",
+        "zip":  "49093",
+        "providers":  ["Xfinity", "ACD.net", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "THRRMIXT",
+        "name":  "Everstream Three Rivers",
+        "lat":  41.94395944,
+        "lon":  -85.63257381,
+        "addr":  "108 S MAIN ST",
+        "city":  "THREE RIVERS",
+        "zip":  "49093",
+        "providers":  ["Spectrum", "Xfinity", "ACD.net", "Everstream", "Mercury Fiber", "Metronet Holdings", "Midwest Energy & Communications", "Surf Internet", "US Signal Company"]
+    },
+    {
+        "clli":  "TKNSMIXI",
+        "name":  "Communications Tekonsha",
+        "lat":  42.09204483,
+        "lon":  -84.98680115,
+        "addr":  "111 JACKSON ST W",
+        "city":  "TEKONSHA",
+        "zip":  "49092",
+        "providers":  ["Spectrum"]
+    },
+    {
+        "clli":  "TMPRMIXG",
+        "name":  "Spectrum Temperance",
+        "lat":  41.77822776,
+        "lon":  -83.56948704,
+        "addr":  "1020 WASHINGTON ST",
+        "city":  "TEMPERANCE",
+        "zip":  "48182",
+        "providers":  ["Xfinity", "Buckeye Cablesystem", "Buckeye Telesystem", "Everstream"]
+    },
+    {
+        "clli":  "TNLKMIXG",
+        "name":  "Truestream Twin Lake",
+        "lat":  43.363277,
+        "lon":  -86.1622,
+        "addr":  "6014 N EAST ST",
+        "city":  "TWIN LAKE",
+        "zip":  "49457",
+        "providers":  ["Spectrum", "Xfinity"]
+    },
+    {
+        "clli":  "TPTNMIXG",
+        "name":  "Signal Company Tipton",
+        "lat":  42.01577291,
+        "lon":  -84.06424463,
+        "addr":  "9130 TIPTON HWY",
+        "city":  "TIPTON",
+        "zip":  "49287",
+        "providers":  ["Xfinity", "Midwest Energy & Communications Torch River Bridge"]
+    },
+    {
+        "clli":  "TRRVMIXG",
+        "name":  "Communications Torch River Bridge",
+        "lat":  44.85166647,
+        "lon":  -85.32057792,
+        "addr":  "7379 CRYSTAL BEACH RD",
+        "city":  "TORCH RIVER",
+        "zip":  "49676",
+        "providers":  ["Spectrum", "186networks", "Truestream"]
+    },
+    {
+        "clli":  "UNCYMIXG",
+        "name":  "Communications Union City",
+        "lat":  42.06719756,
+        "lon":  -85.13552025,
+        "addr":  "116 W ELLEN ST",
+        "city":  "UNION CITY",
+        "zip":  "49094",
+        "providers":  ["Midwest Energy & Communications", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "UNINMIXG",
+        "name":  "Xfinity Union",
+        "lat":  41.78760678,
+        "lon":  -85.86544119,
+        "addr":  "15384 MASON ST",
+        "city":  "UNION",
+        "zip":  "49130",
+        "providers":  ["Xfinity", "Midwest Energy & Communications"]
+    },
+    {
+        "clli":  "VANDMIXG",
+        "name":  "Phone Vandalia",
+        "lat":  41.89349771,
+        "lon":  -85.87610632,
+        "addr":  "16024 HODGSON RD",
+        "city":  "VANDALIA",
+        "zip":  "49095",
+        "providers":  ["Xfinity", "ACD.net", "Midwest Energy & Communications Vanderbuilt"]
+    },
+    {
+        "clli":  "VNDRMIXG",
+        "name":  "Communications Vanderbilt",
+        "lat":  45.14255905,
+        "lon":  -84.66066742,
+        "addr":  "101 ELM ST",
+        "city":  "VANDERBILT",
+        "zip":  "49795",
+        "providers":  ["Spectrum", "ACD.net", "Peninsula Fiber Network", "Presque Isle Connect", "Truestream"]
+    },
+    {
+        "clli":  "VTBGMIXG",
+        "name":  "Truestream Vestaburg",
+        "lat":  43.3997988,
+        "lon":  -84.90965344,
+        "addr":  "8808 2ND",
+        "city":  "VESTABURG",
+        "zip":  "48891",
+        "providers":  ["Spectrum", "HomeWorks Connect", "Point Broadband Fiber Holding LLC"]
+    },
+    {
+        "clli":  "WBVLMIXJ",
+        "name":  "Phone Webberville",
+        "lat":  42.6665986,
+        "lon":  -84.1738581,
+        "addr":  "102 S MAIN ST",
+        "city":  "WEBBERVILLE",
+        "zip":  "48892",
+        "providers":  ["Xfinity", "123.NET Inc.", "Surf Internet", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "WCSTMIXG",
+        "name":  "Wacousta",
+        "lat":  42.84957886,
+        "lon":  -84.70076752,
+        "addr":  "15841 WACOUSTA RD",
+        "city":  "WACOUSTA",
+        "zip":  "48820",
+        "providers":  ["HomeWorks Connect", "Westphalia Telephone Company", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "WDLDMIXG",
+        "name":  "Surf Internet Woodland",
+        "lat":  42.72815153,
+        "lon":  -85.13075799,
+        "addr":  "236 THATCHER",
+        "city":  "WOODLAND",
+        "zip":  "48897",
+        "providers":  ["HomeWorks Connect", "WOW Internet, Cable & Phone"]
+    },
+    {
+        "clli":  "WDMNMIXG",
+        "name":  "Phone Weidman",
+        "lat":  43.68725096,
+        "lon":  -84.96819735,
+        "addr":  "3276 N WOODRUFF RD",
+        "city":  "WEIDMAN",
+        "zip":  "48893",
+        "providers":  ["Spectrum", "CMS Internet", "HomeWorks Connect", "Point Broadband Fiber Holding LLC White Lake"]
+    },
+    {
+        "clli":  "WHLKMIXG",
+        "name":  "White Lake",
+        "lat":  42.65469195,
+        "lon":  -83.57462068,
+        "addr":  "1561 N DUCK LAKE RD",
+        "city":  "HIGHLAND",
+        "zip":  "48356-2701",
+        "providers":  ["Xfinity"]
+    },
+    {
+        "clli":  "WHPGMIXG",
+        "name":  "Xfinity White Pigeon",
+        "lat":  41.79113388,
+        "lon":  -85.67938995,
+        "addr":  "103 MILLER DR",
+        "city":  "WHITE PIGEON",
+        "zip":  "49099",
+        "providers":  ["Spectrum", "Xfinity", "Everstream", "Midwest Energy & Communications", "Surf Internet"]
+    },
+    {
+        "clli":  "WHTHMIXG",
+        "name":  "Surf Internet Whitehall",
+        "lat":  43.40911484,
+        "lon":  -86.34827423,
+        "addr":  "110 MEARS AVE",
+        "city":  "WHITEHALL",
+        "zip":  "49461",
+        "providers":  ["Spectrum", "Xfinity", "ACD.net", "Everstream", "Truestream"]
+    },
+    {
+        "clli":  "WLKMMIXG",
+        "name":  "Everstream Muskegon Wolf Lake",
+        "lat":  43.23321152,
+        "lon":  -86.10739136,
+        "addr":  "1075 WOLF LAKE",
+        "city":  "MUSKEGON",
+        "zip":  "49442",
+        "providers":  ["Spectrum", "Xfinity", "Truestream"]
+    },
+    {
+        "clli":  "WMTNMIXG",
+        "name":  "Truestream Williamston",
+        "lat":  42.68822861,
+        "lon":  -84.28176117,
+        "addr":  "125 E MIDDLE ST",
+        "city":  "WILLIAMSTON",
+        "zip":  "48895",
+        "providers":  ["Xfinity", "123.NET Inc.", "Everstream", "Metronet Holdings", "Surf Internet"]
+    },
+    {
+        "clli":  "YALEMIXG",
+        "name":  "Phone Yale",
+        "lat":  43.12804258,
+        "lon":  -82.79916321,
+        "addr":  "208 JONES ST",
+        "city":  "YALE",
+        "zip":  "48097",
+        "providers":  ["Xfinity", "Air Advantage", "Highline Internet", "Pigeon Telephone Company"]
+    }
+];
+
+// Apply coordinate patches
+WC_DATA.forEach(wc => {
+  if (COORD_PATCHES[wc.clli]) {
+    wc.lat = COORD_PATCHES[wc.clli].lat;
+    wc.lon = COORD_PATCHES[wc.clli].lon;
+  }
+});
+
+function isWireless(p){ return WIRELESS.some(w => p.toLowerCase().includes(w)); }
+
+// Map init
+const map = L.map('map').setView([44.3, -85.0], 7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+}).addTo(map);
+
+const redIcon = L.divIcon({ className:'', html:'<div style="width:10px;height:10px;border-radius:50%;background:#c8102e;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4)"></div>', iconSize:[10,10], iconAnchor:[5,5] });
+const selectedIcon = L.divIcon({ className:'', html:'<div style="width:14px;height:14px;border-radius:50%;background:#c8102e;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.5)"></div>', iconSize:[14,14], iconAnchor:[7,7] });
+
+let markers = {}, selectedClli = null;
+
+// Build markers
+WC_DATA.forEach(wc => {
+  if (!wc.lat || !wc.lon) return;
+  const m = L.marker([wc.lat, wc.lon], {icon: redIcon}).addTo(map);
+  m.bindPopup(() => {
+    const div = document.createElement('div');
+    div.className = 'map-popup';
+    div.innerHTML = '<h4>' + tc(wc.city) + '</h4><p style="font-family:\'Courier New\',monospace;font-size:0.7rem">' + wc.clli + '</p><p>' + (wc.providers.length > 0 ? wc.providers.length + ' alternative provider' + (wc.providers.length>1?'s':'') : 'No providers listed') + '</p><button class="popup-btn" onclick="selectWC(\'' + wc.clli + '\')">See details</button>';
+    return div;
+  }, {maxWidth: 220});
+  m.on('click', () => selectWC(wc.clli));
+  markers[wc.clli] = m;
+});
+
+// Sidebar list
+let filtered = [...WC_DATA];
+function renderList(data) {
+  const list = document.getElementById('wc-list');
+  list.innerHTML = '';
+  document.getElementById('results-count').textContent = data.length.toLocaleString() + ' wire center' + (data.length !== 1 ? 's' : '') + ' found';
+  data.forEach(wc => {
+    const div = document.createElement('div');
+    div.className = 'wc-item' + (wc.clli === selectedClli ? ' selected' : '');
+    div.dataset.clli = wc.clli;
+    const pcount = wc.providers.length;
+    div.innerHTML = '<div class="wc-name">' + tc(wc.city) + '</div>' +
+      '<div class="wc-clli">' + wc.clli + (wc.addr ? ' &nbsp;·&nbsp; ' + tc(wc.addr) : '') + '</div>' +
+      '<div class="wc-pcount' + (pcount === 0 ? ' none' : '') + '">' + (pcount > 0 ? '&#10003; ' + pcount + ' alternative provider' + (pcount>1?'s':'') : 'No providers listed') + '</div>';
+    div.addEventListener('click', () => selectWC(wc.clli));
+    list.appendChild(div);
+  });
+}
+renderList(WC_DATA);
+
+// Search
+document.getElementById('search').addEventListener('input', function() {
+  const q = this.value.toLowerCase().trim();
+  filtered = WC_DATA.filter(wc =>
+    !q ||
+    wc.clli.toLowerCase().includes(q) ||
+    wc.city.toLowerCase().includes(q) ||
+    (wc.addr || '').toLowerCase().includes(q) ||
+    wc.providers.some(p => p.toLowerCase().includes(q))
+  );
+  renderList(filtered);
+});
+
+// Select a wire center
+function selectWC(clli) {
+  const wc = WC_DATA.find(w => w.clli === clli);
+  if (!wc) return;
+
+  // Update sidebar selection
+  if (selectedClli) {
+    const prev = document.querySelector('.wc-item.selected');
+    if (prev) prev.classList.remove('selected');
+    if (markers[selectedClli]) markers[selectedClli].setIcon(redIcon);
+  }
+  selectedClli = clli;
+  const item = document.querySelector('[data-clli="' + clli + '"]');
+  if (item) { item.classList.add('selected'); item.scrollIntoView({block:'nearest'}); }
+  if (markers[clli]) { markers[clli].setIcon(selectedIcon); }
+
+  // Pan map
+  if (wc.lat && wc.lon) map.setView([wc.lat, wc.lon], 11, {animate: true});
+
+  // Show detail panel
+  document.getElementById('detail-name').textContent = tc(wc.city);
+  document.getElementById('detail-clli').textContent = wc.clli;
+
+  let html = '<div class="note-bar">Source: Frontier MI Exhibit C, copper discontinuance proceeding</div>';
+
+  if (wc.addr || wc.city) {
+    html += '<div class="detail-section"><h3>Central office location</h3>';
+    html += '<div class="addr-line">' + tc(wc.addr || '') + '</div>';
+    html += '<div class="addr-line">' + tc(wc.city) + ', MI ' + (wc.zip || '') + '</div>';
+    if (wc.lat && wc.lon) {
+      html += '<a href="https://maps.google.com/?q=' + wc.lat + ',' + wc.lon + '" target="_blank" class="addr-link">View on Google Maps &#8599;</a>';
+    }
+    html += '</div>';
+  }
+
+  html += '<div class="detail-section"><h3>Alternative service providers (' + wc.providers.length + ')</h3>';
+  if (wc.providers.length > 0) {
+    html += '<ul class="provider-list">';
+    wc.providers.forEach(p => {
+      html += '<li class="' + (isWireless(p) ? 'wireless' : '') + '">' + p + '</li>';
+    });
+    html += '</ul>';
+  } else {
+    html += '<div class="no-providers">No alternative providers listed in Exhibit C filing</div>';
+  }
+  html += '</div>';
+
+  html += '<div class="disclosure">Verizon, AT&amp;T, and T-Mobile also provide 4G LTE and/or 5G wireless service in impacted areas. Provider list sourced from Frontier&rsquo;s MI Exhibit C filing.</div>';
+
+  document.getElementById('detail-body').innerHTML = html;
+  document.getElementById('detail-panel').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('open');
+  if (selectedClli && markers[selectedClli]) markers[selectedClli].setIcon(redIcon);
+  selectedClli = null;
+  document.querySelectorAll('.wc-item.selected').forEach(el => el.classList.remove('selected'));
+}
+</script>
+</body>
+</html>
+
+
+
+
